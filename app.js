@@ -1,87 +1,25 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const app = express();
-const fs = require('fs');
+var express = require('express'),
+  bodyParser = require('body-parser'),
+  router = express.Router(),
+   mongoose = require('mongoose');
+var app = express();
+var exphbs = require('express-handlebars');
 var path = require('path');
-var _ = require('lodash')
-const JSONStream = require('JSONStream');
-var engines = require('consolidate');
-app.engine('hbs',engines.handlebars);
-app.set('view engine', 'hbs')
-// set the view engine to ejs
-//app.set('view engine', 'ejs');
-app.set('views', './views');
-app.use('/profilepics', express.static('images'));
-app.use(express.static(__dirname + '/public'));
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-function getUserFilePath (username) {
-  return path.join(__dirname, 'users', username) + '.json'
-}
-
-function getUser (username) {
-  var user = JSON.parse(fs.readFileSync(getUserFilePath(username), {encoding: 'utf8'}))
-  user.name.full = _.startCase(user.name.first + ' ' + user.name.last)
-  _.keys(user.location).forEach(function (key) {
-    user.location[key] = _.startCase(user.location[key])
-  })
-  return user
-}
-
-function saveUser (username, data) {
-  var fp = getUserFilePath(username)
-  fs.unlinkSync(fp) // delete the file
-  fs.writeFileSync(fp, JSON.stringify(data, null, 2), {encoding: 'utf8'})
-}
-
-app.engine('hbs', engines.handlebars)
-
-app.set('views', './views')
-app.set('view engine', 'hbs')
-
-app.use('/profilepics', express.static('images'))
-app.use(bodyParser.urlencoded({ extended: true }))
-
-app.get('/favicon.ico', function (req, res) {
-  res.end()
-})
-
-app.get('/', function (req, res) {
-  var users = []
-  fs.readdir('users', function (err, files) {
-    files.forEach(function (file) {
-      fs.readFile(path.join(__dirname, 'users', file), {encoding: 'utf8'}, function (err, data) {
-        var user = JSON.parse(data)
-        user.name.full = _.startCase(user.name.first + ' ' + user.name.last)
-        users.push(user)
-        if (users.length === files.length) res.render('index', {users: users})
-      })
+app.use(bodyParser.urlencoded({ "extended": false }));
+app.set('views', path.join(__dirname, '/views'));
+app.engine('handlebars', exphbs({ defaultLayout: 'layout' }));
+app.set('view engine', 'handlebars');
+app.use(express.static(__dirname + '/public'))
+app.use(require('./Controllers'))
+mongoose.connect('mongodb://localhost:27017/Users', function (err) {
+  if (err) {
+    console.log('Unable to connect to Mongo.')
+    process.exit(1)
+  } else {
+    var db = mongoose.connection;
+    app.listen(3000, function () {
+      console.log('Listening on port 3000...')
     })
-  })
+  }
 })
-
-app.get('/:username', function (req, res) {
-  var username = req.params.username
-  var user = getUser(username)
-  res.render('user', {
-    user: user,
-    address: user.location
-  })
-})
-
-app.put('/:username', function (req, res) {
-  var username = req.params.username
-  var user = getUser(username)
-  user.location = req.body
-  saveUser(username, user)
-  res.end()
-})
-
-app.delete('/:username', function (req, res) {
-  var fp = getUserFilePath(req.params.username)
-  fs.unlinkSync(fp) // delete the file
-  res.sendStatus(200)
-})
-
-app.listen(3000,()=>{console.log("App running at port 3000");})
